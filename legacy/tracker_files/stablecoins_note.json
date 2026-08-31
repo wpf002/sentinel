@@ -1,0 +1,7 @@
+{
+  "issue": "stablecoins total not found in top-level keys used by parser",
+  "top_level_keys_sample": [
+    "peggedAssets",
+    "chains"
+  ]
+}

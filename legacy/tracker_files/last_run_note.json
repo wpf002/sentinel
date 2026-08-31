@@ -1,0 +1,29 @@
+{
+  "run_utc": "2026-08-28T12:01:55Z",
+  "trigger": "Friday 07:00 America/Chicago",
+  "fred": {
+    "status": "unavailable",
+    "attempts": 2,
+    "groups": [
+      "liquidity_m2",
+      "spreads_conditions",
+      "rates_funding"
+    ],
+    "action": "Skipped after group-specific retries; preserved last complete FRED snapshot dated 2026-07-09"
+  },
+  "stablecoins": {
+    "status": "success",
+    "aggregate_usd": 310875460528.7599,
+    "assets_count": 334,
+    "change_vs_prior_saved_observation_usd": 2596320623.603821,
+    "change_vs_prior_saved_observation_pct": 0.008421979587728818,
+    "threshold_event": true,
+    "action": "In-app notification sent"
+  },
+  "ecb": {
+    "status": "success",
+    "latest_index_date": "23 July 2026",
+    "action": "No newer index date than saved state"
+  },
+  "notification": "sent in-app: stablecoin aggregate rose $2.596B WoW, crossing the $2B threshold"
+}

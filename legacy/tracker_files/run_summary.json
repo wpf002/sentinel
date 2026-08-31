@@ -1,0 +1,29 @@
+{
+  "fresh": false,
+  "material": true,
+  "asof_date": "2026-07-09",
+  "asof_prior_date": "2026-07-02",
+  "alerts": [
+    "Stablecoin supply WoW >= $2B"
+  ],
+  "regime_score": 5,
+  "regime_label": "expanding",
+  "signal_notes": [
+    "+Fed net liquidity",
+    "+M2",
+    "+stablecoins",
+    "-IG spreads",
+    "+HY spreads",
+    "+NFCI",
+    "+ANFCI",
+    "+reserves",
+    "+funding"
+  ],
+  "failures": {
+    "fred": 6,
+    "stablecoins": 0,
+    "ecb": 0
+  },
+  "notification_sent": true,
+  "notification_reason": "Stablecoin aggregate rose $2.596B WoW, crossing the $2B threshold."
+}

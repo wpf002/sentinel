@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "liquidity-sentinel"
+version = "0.2.0"
+description = "Global liquidity monitor: Fed net liquidity, M2, credit, funding, stablecoin supply."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+# Some publishers serve an incomplete TLS chain that the system trust store
+# cannot complete on its own. Install with `.[certs]` if a source fails
+# verification. Core runtime stays dependency-free.
+certs = ["certifi"]
+dev = ["pytest>=8.0", "ruff>=0.6", "certifi"]
+
+[project.scripts]
+sentinel = "liquidity_sentinel.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/liquidity_sentinel"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,13 @@
+{
+  "run_utc": "2026-08-28T12:01:55Z",
+  "fred_error": "liquidity_m2: TimeoutError: The read operation timed out; spreads_conditions: TimeoutError: The read operation timed out; rates_funding: TimeoutError: The read operation timed out",
+  "stablecoins_error": null,
+  "ecb_error": null,
+  "fred_rows": 0,
+  "stablecoins_total_usd": 310875460528.7599,
+  "stablecoins_assets_count": 334,
+  "ecb": {
+    "date_text": "23 July 2026",
+    "headline": " Quick links What is monetary policy? Strategy review Asset purchase programmes Latest monetary policy press conference 23 July 2026 Introduction Benefits of price stability Scope of monetary policy Transmission mechanism Decisions, statements & accounts Monetary policy strategy Strategy review Medium-term orientation Two per cent inflation target Economic, monetary a"
+  }
+}

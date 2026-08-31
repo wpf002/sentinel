@@ -1,0 +1,81 @@
+# Liquidity Sentinel configuration.
+# Every value here is a policy knob; code contains no hardcoded thresholds.
+
+[run]
+# Guard the scheduled entrypoint. Empty weekday list disables the guard.
+timezone = "America/Chicago"
+weekdays = [5]          # 1=Mon .. 7=Sun
+hour = 7
+# Allow `sentinel run` to proceed outside the window (manual/backfill use).
+enforce_window = false
+
+[http]
+timeout_seconds = 20
+max_attempts = 4
+backoff_base_seconds = 1.5
+backoff_max_seconds = 20.0
+user_agent = "LiquiditySentinel/0.2 (+https://github.com/wpf002/sentinel)"
+
+[fred]
+# Fetch order. "api" is used only when FRED_API_KEY is set.
+strategy = ["api", "csv"]
+# Only pull observations from this far back; keeps payloads small and fast.
+history_days = 900
+# Default staleness limit. A series older than this is flagged stale and the
+# rules that depend on it are suppressed.
+stale_after_days = 21
+
+# Publication lag differs by series, so a single limit misreads some of them.
+# WM2NS is weekly data released about four weeks late; a flat 21-day rule would
+# report it as stale every single week.
+[fred.stale_after_days_overrides]
+WM2NS = 45
+NFCI = 21
+ANFCI = 21
+WALCL = 14
+WRESBAL = 14
+WTREGEN = 14
+RRPONTSYD = 10
+DGS2 = 10
+DGS10 = 10
+T10Y2Y = 10
+SOFR = 10
+EFFR = 10
+IORB = 10
+BAMLC0A0CM = 10
+BAMLH0A0HYM2 = 10
+
+[stablecoins]
+url = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
+stale_after_days = 10
+
+[ecb]
+# The public index page is a JS shell; the release list lives in per-year
+# include files it pulls in client-side. Fetch those directly.
+url = "https://www.ecb.europa.eu/press/annual-reports-financial-statements/wfs/{year}/html/index_include.en.html"
+# ECB is informational only; failure never blocks a run.
+enabled = true
+
+[alerts]
+stablecoins_wow_pct = 0.01
+stablecoins_wow_usd = 2.0e9
+fed_net_liquidity_wow_bil = 100.0
+fed_component_wow_bil = 100.0
+reserves_drop_bil = 75.0
+reserves_floor_bil = 3000.0
+m2_wow_pct = 0.005
+ig_spread_wow_bps = 10.0
+hy_spread_wow_bps = 25.0
+nfci_wow = 0.10
+anfci_wow = 0.10
+yield_wow_bps = 20.0
+curve_wow_bps = 15.0
+policy_rate_wow_bps = 10.0
+funding_spread_widen_bps = 5.0
+regime_score_delta = 2
+
+[notify]
+# Sinks: console, file, webhook
+sinks = ["console", "file"]
+# Suppress repeat notifications for the same alert set within this many days.
+dedupe_days = 6

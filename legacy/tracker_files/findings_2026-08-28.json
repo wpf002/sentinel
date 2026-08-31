@@ -1,0 +1,46 @@
+{
+  "run_utc": "2026-08-28T12:01:55Z",
+  "fresh_weekly_fred_data": false,
+  "fred_status": "All three split direct groups timed out, including one retry per failed group; saved FRED snapshot preserved.",
+  "saved_fred_asof": "2026-07-09",
+  "regime": {
+    "label": "expanding",
+    "score": 5
+  },
+  "saved_fed_net_liquidity_bil": 5961.541228,
+  "saved_fed_net_liquidity_wow_bil": 117.216403,
+  "saved_m2_bil": 23062.9,
+  "stablecoins_total_usd": 310875460528.7599,
+  "stablecoins_change_vs_saved_prior_usd": 2596320623.603821,
+  "stablecoins_change_vs_saved_prior_pct": 0.008421979587728818,
+  "stablecoins_assets_count": 334,
+  "saved_credit": {
+    "ig_pct": 0.76,
+    "hy_pct": 2.7,
+    "nfci": -0.515,
+    "anfci": -0.506
+  },
+  "saved_rates_funding": {
+    "dgs2_pct": 4.21,
+    "dgs10_pct": 4.56,
+    "t10y2y_pct": 0.38,
+    "sofr_pct": 3.53,
+    "effr_pct": 3.62,
+    "iorb_pct": 3.65,
+    "sofr_minus_iorb_bps": -12.0,
+    "sofr_minus_effr_bps": -9.0
+  },
+  "saved_reserves_bil": 3098.911,
+  "material_alerts": [
+    "Stablecoin supply WoW >= $2B"
+  ],
+  "notification_sent": true,
+  "sources": [
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL,WRESBAL,WTREGEN,RRPONTSYD,WM2NS; https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM,BAMLH0A0HYM2,NFCI,ANFCI; https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2,DGS10,T10Y2Y,SOFR,EFFR,IORB",
+    "https://stablecoins.llama.fi/stablecoins?includePrices=true",
+    "https://www.ecb.europa.eu/press/pr/wfs/html/index.en.html",
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL,WRESBAL,WTREGEN,RRPONTSYD,WM2NS",
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM,BAMLH0A0HYM2,NFCI,ANFCI",
+    "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2,DGS10,T10Y2Y,SOFR,EFFR,IORB"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "project_name": "Liquidity Sentinel",
+  "current_scheduled_task_name": "Global Liquidity Tracker",
+  "task_id": "ecb64bd3",
+  "task_thread_url": "https://www.perplexity.ai/computer/tasks/e660a414-ba3e-4fbc-8f82-f0bd8c34dc02",
+  "status_at_export": "active",
+  "schedule": {
+    "cron_expression": "0 12 * * 5",
+    "human_readable": "Fridays at 12:00 UTC",
+    "central_time_note": "7:00 AM Central during daylight saving time; 6:00 AM Central during standard time"
+  },
+  "export_time_context": {
+    "next_run": "Friday, September 04, 2026 at 7:00 AM CDT",
+    "last_run": "Friday, August 28, 2026 at 7:01 AM CDT",
+    "run_count": 6
+  },
+  "product_status": "Credit-efficient MVP monitor, not fully finished until FRED reliability is fixed.",
+  "credit_optimization": {
+    "weekly_runs": 1,
+    "direct_endpoints_only": true,
+    "broad_web_research": false,
+    "browser_automation": false,
+    "deep_analysis": false,
+    "multi_source_exploration": false,
+    "optional_browsing": false,
+    "repeated_timeout_retries": false,
+    "notifications": "in-app only for material stablecoin move, FRED recovery, first complete baseline, or fresh-FRED threshold/regime event"
+  },
+  "core_sources": {
+    "stablecoins_weekly": "https://stablecoins.llama.fi/stablecoins?includePrices=true",
+    "fred_core_when_allowed": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL,WRESBAL,WTREGEN,RRPONTSYD,WM2NS",
+    "fred_secondary_spreads_conditions_when_core_succeeds": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLC0A0CM,BAMLH0A0HYM2,NFCI,ANFCI",
+    "fred_secondary_rates_funding_when_core_succeeds": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS2,DGS10,T10Y2Y,SOFR,EFFR,IORB",
+    "ecb_when_allowed": "https://www.ecb.europa.eu/press/pr/wfs/html/index.en.html"
+  }
+}
