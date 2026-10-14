@@ -113,6 +113,13 @@ class Store:
         rows.reverse()
         return rows
 
+    def latest_observation_dates(self) -> dict[str, date]:
+        """Newest stored observation date per series, in one query."""
+        cur = self.conn.execute(
+            "SELECT series, MAX(obs_date) AS obs_date FROM observations GROUP BY series"
+        )
+        return {r["series"]: date.fromisoformat(r["obs_date"]) for r in cur}
+
     def known_series(self) -> list[str]:
         cur = self.conn.execute("SELECT DISTINCT series FROM observations ORDER BY series")
         return [r["series"] for r in cur]

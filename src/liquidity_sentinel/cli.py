@@ -13,12 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .config import load_config
 from .migrate import migrate as run_migrate
-from .pipeline import in_window
+from .pipeline import STABLECOIN_SERIES, in_window
 from .pipeline import run as run_pipeline
 from .store import Store
 
@@ -52,24 +52,54 @@ def cmd_run(args) -> int:
     return 0
 
 
+def current_staleness(cfg, store, today: date) -> dict[str, int]:
+    """Series whose newest observation is past its limit, measured against *today*.
+
+    Computed live rather than read back from the last run's payload: a saved
+    ``stale_series`` list was accurate when written, so replaying it makes a
+    month-old run look fresh.
+    """
+    stale: dict[str, int] = {}
+    for series, obs_date in store.latest_observation_dates().items():
+        age = (today - obs_date).days
+        if series == STABLECOIN_SERIES:
+            limit = cfg.stablecoins.stale_after_days
+        else:
+            limit = cfg.fred.stale_days_for(series)
+        if age > limit:
+            stale[series] = age
+    return dict(sorted(stale.items(), key=lambda kv: -kv[1]))
+
+
 def cmd_status(args) -> int:
     cfg = load_config(args.config, data_dir=args.data_dir)
+    now = datetime.now(UTC)
     with Store(cfg.db_path) as store:
         health = store.health()
         last = store.last_run()
         series = store.known_series()
+        stale = current_staleness(cfg, store, now.date())
+        run_age_days = None
+        raw_run = (last or {}).get("run_utc")
+        if raw_run:
+            try:
+                run_age_days = (now - datetime.fromisoformat(raw_run.replace("Z", "+00:00"))).days
+            except ValueError:
+                run_age_days = None
         payload = {
             "database": str(cfg.db_path),
             "observations": store.observation_count(),
             "series_tracked": len(series),
-            "last_run_utc": (last or {}).get("run_utc"),
+            "last_run_utc": raw_run,
+            "last_run_age_days": run_age_days,
             "last_asof": (last or {}).get("asof_date"),
             "regime": {
                 "score": (last or {}).get("regime_score"),
                 "label": (last or {}).get("regime_label"),
                 "confidence": (last or {}).get("regime_confidence"),
             },
-            "stale_series": (last or {}).get("stale_series", []),
+            "stale_series": stale,
+            "stale_series_at_last_run": (last or {}).get("stale_series", []),
             "source_health": health,
             "in_schedule_window": in_window(cfg),
         }
@@ -78,12 +108,19 @@ def cmd_status(args) -> int:
         return 0
     print(f"database        {payload['database']}")
     print(f"observations    {payload['observations']:,} across {payload['series_tracked']} series")
-    print(f"last run        {payload['last_run_utc'] or 'never'}")
+    age = payload["last_run_age_days"]
+    suffix = f"  ({age}d ago)" if age is not None else ""
+    print(f"last run        {payload['last_run_utc'] or 'never'}{suffix}")
     print(f"data as-of      {payload['last_asof'] or 'n/a'}")
     print(f"regime          {payload['regime']['label'] or 'n/a'} "
-          f"({payload['regime']['score']}, {payload['regime']['confidence'] or 'n/a'} confidence)")
-    stale = payload["stale_series"]
-    print(f"stale series    {', '.join(stale) if stale else 'none'}")
+          f"({payload['regime']['score']}, {payload['regime']['confidence'] or 'n/a'} confidence)"
+          f"{'  [from a stale run]' if age is not None and age > 7 else ''}")
+    if stale:
+        print(f"stale series    {len(stale)} of {len(series)}")
+        for name, days in stale.items():
+            print(f"  {name:<18} {days}d old")
+    else:
+        print("stale series    none")
     print("source health")
     for entry in health:
         failures = entry["consecutive_failures"]

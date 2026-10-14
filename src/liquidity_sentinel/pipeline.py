@@ -46,6 +46,23 @@ def in_window(cfg: Config, moment: datetime | None = None) -> bool:
     return local.isoweekday() in cfg.run.weekdays and local.hour == cfg.run.hour
 
 
+def _merge_fetched(
+    cached: dict[str, list[tuple[date, float]]],
+    fetched: dict[str, list[tuple[date, float]]],
+) -> dict[str, list[tuple[date, float]]]:
+    """Overlay freshly fetched points on cached history without writing to disk.
+
+    Fetched values win on a date collision, matching what ``upsert_observations``
+    would have done.
+    """
+    merged = {k: list(v) for k, v in cached.items()}
+    for series, points in fetched.items():
+        combined = dict(merged.get(series, []))
+        combined.update(dict(points))
+        merged[series] = sorted(combined.items())
+    return merged
+
+
 @dataclass
 class RunResult:
     ran: bool
@@ -88,32 +105,39 @@ def run(
     run_utc = utc_stamp(now)
     source_status: dict[str, str] = {}
 
-    # 1-2. Fetch and persist.
+    # 1-2. Fetch, then persist unless this is a dry run. A dry run must leave the
+    # mirror, the source-health table and the run log exactly as it found them,
+    # so it merges what it fetched over the cached history in memory instead.
+    persist = not dry_run
+
     fred = fetch_fred(cfg, fetcher=fetcher)
-    for series, points in (fred.data or {}).items():
-        store.upsert_observations(series, points, fred.labels.get(series, "fred"))
-    if fred.data:
-        store.mark_success("fred")
-    if fred.errors:
-        store.mark_failure("fred", fred.error_summary or "unknown")
+    if persist:
+        for series, points in (fred.data or {}).items():
+            store.upsert_observations(series, points, fred.labels.get(series, "fred"))
+        if fred.data:
+            store.mark_success("fred")
+        if fred.errors:
+            store.mark_failure("fred", fred.error_summary or "unknown")
     source_status["fred"] = (
         f"{len(fred.data or {})}/{len(ALL_SERIES)} series"
         + (f" — {len(fred.errors)} failed" if fred.errors else "")
     )
 
     stable = fetch_stablecoins(cfg, fetcher=fetcher)
-    if stable.ok:
-        store.mark_success("stablecoins")
-    else:
-        store.mark_failure("stablecoins", stable.error_summary or "unknown")
+    if persist:
+        if stable.ok:
+            store.mark_success("stablecoins")
+        else:
+            store.mark_failure("stablecoins", stable.error_summary or "unknown")
     source_status["stablecoins"] = _source_status(stable)
 
     ecb = fetch_ecb(cfg, fetcher=fetcher)
-    if ecb.ok:
-        store.mark_success("ecb")
-        store.set_json("ecb_latest", ecb.data)
-    elif cfg.ecb.enabled:
-        store.mark_failure("ecb", ecb.error_summary or "unknown")
+    if persist:
+        if ecb.ok:
+            store.mark_success("ecb")
+            store.set_json("ecb_latest", ecb.data)
+        elif cfg.ecb.enabled:
+            store.mark_failure("ecb", ecb.error_summary or "unknown")
     source_status["ecb"] = _source_status(ecb)
 
     # 3. Build from the durable mirror, so cached series still contribute.
@@ -122,6 +146,8 @@ def run(
         for series in ALL_SERIES
         if store.series_history(series, limit=1)
     }
+    if not persist:
+        histories = _merge_fetched(histories, fred.data or {})
     live = {s: fred.labels.get(s, "cache") for s in (fred.data or {})}
     snapshot = build_snapshot(
         histories, today=today, stale_after_days=cfg.fred.stale_days_for, sources=live
@@ -131,11 +157,15 @@ def run(
 
     # Store the aggregate as an observation series so its week-over-week change
     # uses the same seven-day rule as every FRED series.
-    if stable.ok:
+    if stable.ok and persist:
         store.upsert_observations(
             STABLECOIN_SERIES, [(today, stable.data["total_usd"])], "defillama"
         )
     history = store.series_history(STABLECOIN_SERIES)
+    if stable.ok and not persist:
+        history = _merge_fetched(
+            {STABLECOIN_SERIES: history}, {STABLECOIN_SERIES: [(today, stable.data["total_usd"])]}
+        )[STABLECOIN_SERIES]
     if stable.ok:
         apply_stablecoins(
             snapshot, stable.data["total_usd"], stable.data["asset_count"], history,

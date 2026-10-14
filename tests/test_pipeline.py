@@ -205,3 +205,57 @@ def test_migrate_parses_the_exported_wide_history():
     parsed = load_wide_csv(text)
     assert parsed["WALCL"] == [(date(2026, 8, 19), 100.0), (date(2026, 8, 27), 102.0)]
     assert parsed["SOFR"] == [(date(2026, 8, 19), 4.3), (date(2026, 8, 26), 4.4)]
+
+
+def test_dry_run_writes_nothing_at_all(local_cfg, store, fixtures):
+    """--dry-run must not touch observations, source health or the run log."""
+    stable = (fixtures / "stablecoins.json").read_text()
+    ecb = (fixtures / "ecb_year_include.html").read_text()
+    fetcher = RecordedFetcher({**full_fred_routes(), "llama.fi": stable, "/2026/": ecb})
+
+    result = run(
+        local_cfg, store=store, force=True, dry_run=True, fetcher=fetcher, today=TODAY, now=NOW
+    )
+
+    assert result.ran
+    assert store.observation_count() == 0, "a dry run persisted observations"
+    assert store.health() == [], "a dry run marked source health"
+    assert store.last_run() is None, "a dry run recorded a run"
+
+
+def test_dry_run_still_evaluates_fetched_data(local_cfg, store, fixtures):
+    """Reading nothing from disk must not mean reporting nothing."""
+    stable = (fixtures / "stablecoins.json").read_text()
+    ecb = (fixtures / "ecb_year_include.html").read_text()
+    fetcher = RecordedFetcher({**full_fred_routes(), "llama.fi": stable, "/2026/": ecb})
+
+    result = run(
+        local_cfg, store=store, force=True, dry_run=True, fetcher=fetcher, today=TODAY, now=NOW
+    )
+
+    assert len(result.snapshot.fresh_series) == len(ALL_SERIES)
+    assert result.snapshot.get("WALCL_bil") is not None
+    assert result.snapshot.get("fed_net_liquidity_bil") is not None
+    assert result.payload["asof_date"] == "2026-08-26"
+
+
+def test_dry_run_merges_over_cached_history(local_cfg, store, fixtures):
+    """A dry run after a real run sees both the mirror and the new fetch."""
+    stable = (fixtures / "stablecoins.json").read_text()
+    healthy = RecordedFetcher(
+        {**full_fred_routes(), "llama.fi": stable}, default=FetchError("u", 1, "HTTP 404")
+    )
+    run(local_cfg, store=store, force=True, fetcher=healthy, today=TODAY, now=NOW)
+    baseline = store.observation_count()
+
+    later_routes = {
+        f"id={name}": series_csv(name, [("2026-09-02", 9.0)]) for name in ALL_SERIES
+    }
+    fetcher = RecordedFetcher({**later_routes, "llama.fi": stable}, default=FetchError("u", 1, "x"))
+    result = run(
+        local_cfg, store=store, force=True, dry_run=True, fetcher=fetcher,
+        today=date(2026, 9, 2), now=datetime(2026, 9, 2, 12, 0, tzinfo=UTC),
+    )
+
+    assert store.observation_count() == baseline, "dry run must not grow the mirror"
+    assert result.payload["asof_date"] == "2026-09-02", "but it must see the new observation"
