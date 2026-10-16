@@ -56,7 +56,11 @@ def render_text(
     out.append(_line("Fed net liquidity", _fmt(snapshot.get("fed_net_liquidity_bil"), ",.1f", "B")))
     out.append(_line("  WoW", _fmt(snapshot.get("fed_net_liquidity_wow_bil"), "+,.1f", "B")))
     out.append(_line("Balance sheet (WALCL)", _fmt(snapshot.get("WALCL_bil"), ",.1f", "B")))
-    out.append(_line("Reserves (WRESBAL)", _fmt(snapshot.get("WRESBAL_bil"), ",.1f", "B")))
+    reserves = snapshot.get("WRESBAL_bil")
+    floor = snapshot.get("reserves_floor_bil")
+    under_floor = reserves is not None and floor is not None and reserves < floor
+    below = "  below floor" if under_floor else ""
+    out.append(_line("Reserves (WRESBAL)", _fmt(reserves, ",.1f", "B") + below))
     out.append(_line("TGA (WTREGEN)", _fmt(snapshot.get("WTREGEN_bil"), ",.1f", "B")))
     out.append(_line("Reverse repo (RRP)", _fmt(snapshot.get("RRPONTSYD_bil"), ",.3f", "B")))
     out.append(_line("M2", _fmt(snapshot.get("M2_bil"), ",.1f", "B")))

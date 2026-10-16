@@ -189,6 +189,11 @@ def run(
         snapshot.notes.append(f"FRED series unavailable: {', '.join(sorted(fred.errors))}")
 
     # 4. Score, alert, notify, record.
+    # Surfaced so `report` can flag reserves sitting below the floor. The floor
+    # itself is a crossing alert, not a level alert, so the standing condition
+    # needs somewhere to show up that is not the alert list.
+    snapshot.values["reserves_floor_bil"] = cfg.alerts.get("reserves_floor_bil")
+
     regime = score_regime(snapshot)
     fired = alert_rules.evaluate(snapshot, cfg.alerts)
     fired += alert_rules.regime_alerts(regime, previous_run, cfg.alerts)

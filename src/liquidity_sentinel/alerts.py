@@ -104,6 +104,50 @@ class AlertEvaluator:
             )
         )
 
+    def _reserves_floor_crossing(self) -> None:
+        """Alert when reserves cross the floor, in either direction.
+
+        This was a level rule: ``if reserves_level < floor``. That condition is
+        true on every run for as long as reserves stay below, so it re-fired for
+        the six weeks reserves sat under $3,000B in 2026 -- six notifications for
+        one standing fact, spaced only by the dedupe window.
+
+        The prior-week level is the current level minus the week-over-week
+        change, both already in the snapshot, so the crossing is detected without
+        reading the previous run and without depending on run cadence. The
+        standing condition is still reported; ``report`` flags it on the reserves
+        line. It just is not an alert.
+        """
+        floor = self.thresholds.get("reserves_floor_bil")
+        level = self._usable("WRESBAL_bil")
+        change = self._usable("WRESBAL_wow_bil")
+        if floor is None or level is None or change is None:
+            return
+        prior = level - change
+
+        if prior >= floor > level:
+            self.alerts.append(
+                Alert(
+                    "reserves_floor_breach",
+                    f"Bank reserves fell through the ${floor:,.0f}B floor "
+                    f"to ${level:,.0f}B (from ${prior:,.0f}B)",
+                    level,
+                    floor,
+                    "critical",
+                )
+            )
+        elif level >= floor > prior:
+            self.alerts.append(
+                Alert(
+                    "reserves_floor_recovery",
+                    f"Bank reserves recovered above the ${floor:,.0f}B floor "
+                    f"to ${level:,.0f}B (from ${prior:,.0f}B)",
+                    level,
+                    floor,
+                    "warning",
+                )
+            )
+
     def evaluate(self) -> list[Alert]:
         t = self.thresholds
         s = self.snapshot
@@ -146,14 +190,7 @@ class AlertEvaluator:
                 Alert("reserves_drop", f"Bank reserves {_fmt_bil(reserves_change)} WoW",
                       reserves_change, -t["reserves_drop_bil"], "critical")
             )
-        reserves_level = self._usable("WRESBAL_bil")
-        if reserves_level is not None and reserves_level < t["reserves_floor_bil"]:
-            self.alerts.append(
-                Alert("reserves_floor",
-                      f"Bank reserves ${reserves_level:,.0f}B below "
-                      f"${t['reserves_floor_bil']:,.0f}B floor",
-                      reserves_level, t["reserves_floor_bil"], "critical")
-            )
+        self._reserves_floor_crossing()
 
         self._abs_rule("M2_wow_pct", "m2_wow_pct", "M2", _fmt_pct)
         self._abs_rule("BAMLC0A0CM_wow_bps", "ig_spread_wow_bps", "IG spread", _fmt_bps)

@@ -51,7 +51,7 @@ def test_stale_inputs_suppress_the_rules_that_depend_on_them(thresholds):
 
     s.stale_series = []
     keys = {a.key for a in evaluate(s, thresholds)}
-    assert {"reserves_floor", "reserves_drop", "WRESBAL_wow_bil"} <= keys
+    assert {"reserves_floor_breach", "reserves_drop", "WRESBAL_wow_bil"} <= keys
 
 
 def test_net_liquidity_rule_needs_all_three_components_fresh(thresholds):
@@ -70,10 +70,38 @@ def test_funding_spread_alerts_only_on_widening(thresholds):
     assert fired[0].severity == "critical"
 
 
-def test_reserves_floor_is_a_level_rule_not_a_change_rule(thresholds):
+def test_reserves_floor_fires_on_the_crossing_not_the_state(thresholds):
+    """Reserves sat below $3,000B for six weeks; that is one event, not six."""
+    # Crossed below this week: 3,010 -> 2,924.9.
+    crossing = snap(WRESBAL_bil=2_924.9, WRESBAL_wow_bil=-85.1)
+    fired = evaluate(crossing, thresholds)
+    assert "reserves_floor_breach" in {a.key for a in fired}
+    breach = next(a for a in fired if a.key == "reserves_floor_breach")
+    assert breach.severity == "critical"
+    assert "3,010" in breach.message, "names the level it fell from"
+
+    # Already below a week ago: 2,930 -> 2,924.9. Same state, no new event.
+    persisting = snap(WRESBAL_bil=2_924.9, WRESBAL_wow_bil=-5.1)
+    assert "reserves_floor_breach" not in {a.key for a in evaluate(persisting, thresholds)}
+
+
+def test_reserves_floor_recovery_fires_on_crossing_back_above(thresholds):
+    # 2,980 -> 3,029.7.
+    fired = evaluate(snap(WRESBAL_bil=3_029.7, WRESBAL_wow_bil=49.7), thresholds)
+    recovery = next(a for a in fired if a.key == "reserves_floor_recovery")
+    assert recovery.severity == "warning"
+    assert "recovered above" in recovery.message
+
+
+def test_reserves_floor_silent_while_comfortably_above(thresholds):
+    fired = evaluate(snap(WRESBAL_bil=3_100.0, WRESBAL_wow_bil=10.0), thresholds)
+    assert not any(a.key.startswith("reserves_floor") for a in fired)
+
+
+def test_reserves_floor_needs_the_week_over_week_change(thresholds):
+    """Without the prior level there is no crossing to detect."""
     fired = evaluate(snap(WRESBAL_bil=2_924.9), thresholds)
-    assert [a.key for a in fired] == ["reserves_floor"]
-    assert fired[0].severity == "critical"
+    assert not any(a.key.startswith("reserves_floor") for a in fired)
 
 
 def test_regime_score_counts_only_available_signals():
