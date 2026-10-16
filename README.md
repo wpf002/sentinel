@@ -39,6 +39,7 @@ from roughly 600 KB to 20 KB, which also resolves the timeouts.
 | Failure blast radius | One failure ⇒ all FRED stale | Per-series; 14 good series still report |
 | Persistence | Latest snapshot in one JSON blob | SQLite mirror of every observation ever seen |
 | Week-over-week | vs. the last successful *run* | vs. the real prior *observation* |
+| Stablecoin history | One point per run | 3,244 daily points from the source |
 | Net liquidity | Mixed observation dates | Components aligned to the weekly anchor date |
 | Staleness | Global boolean | Per-series age in days, gates the rules that use it |
 | Alerts | Bare strings | Value, threshold, severity; deduped across runs |
@@ -100,7 +101,7 @@ Secrets come from the environment (see [`.env.example`](.env.example)):
 | Source | Endpoint | Role |
 | --- | --- | --- |
 | FRED | per-series `fredgraph.csv`, or the keyed API | Fed balance sheet, M2, spreads, rates |
-| DefiLlama | `stablecoins.llama.fi/stablecoins` | Aggregate stablecoin supply |
+| DefiLlama | `stablecoins.llama.fi/stablecoincharts/all` | Aggregate stablecoin supply, full daily history |
 | ECB | weekly financial statement index | Publication date only; never gates a run |
 
 ## Metrics
@@ -111,7 +112,9 @@ Secrets come from the environment (see [`.env.example`](.env.example)):
   expanding, `≤ -2` contracting. Reported with input coverage, so a `+3` from
   nine signals is distinguishable from a `+3` from two.
 - **Week-over-week** — computed against the newest observation at least seven
-  days older than the latest one.
+  days older than the latest one. Every source supplies its own dense history,
+  so a gap between runs never stretches the comparison window. When history is
+  sparse enough that it does, the run says so and reports the actual span.
 
 ## Layout
 

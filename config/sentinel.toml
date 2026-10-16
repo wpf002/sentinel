@@ -46,7 +46,11 @@ BAMLC0A0CM = 10
 BAMLH0A0HYM2 = 10
 
 [stablecoins]
-url = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
+# The chart endpoint, not /stablecoins. It returns the full daily history of
+# aggregate supply in one request, so the seven-day comparison is always seven
+# days even after a gap in runs, and the current value comes from the same
+# series as the history (the two endpoints aggregate differently).
+url = "https://stablecoins.llama.fi/stablecoincharts/all"
 stale_after_days = 10
 
 [ecb]

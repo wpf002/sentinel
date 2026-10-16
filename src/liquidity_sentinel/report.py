@@ -69,8 +69,8 @@ def render_text(
     out.append(_line("  WoW", _fmt(wow / 1e9 if wow is not None else None, "+,.2f", "B")))
     pct = snapshot.get("stablecoins_wow_pct")
     out.append(_line("  WoW %", _fmt(pct * 100 if pct is not None else None, "+,.2f", "%")))
-    count = snapshot.get("stablecoins_asset_count")
-    out.append(_line("Assets counted", _fmt(count, ",.0f")))
+    count = snapshot.get("stablecoins_peg_count")
+    out.append(_line("Peg currencies", _fmt(count, ",.0f")))
     span = snapshot.get("stablecoins_change_days")
     if span is not None and span != 7:
         out.append(_line("Comparison window", f"{span:.0f} days"))

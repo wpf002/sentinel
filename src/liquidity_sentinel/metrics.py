@@ -255,7 +255,7 @@ def build_snapshot(
 def apply_stablecoins(
     snapshot: Snapshot,
     total_usd: float | None,
-    asset_count: int | None,
+    peg_count: int | None,
     history: list[tuple[date, float]] | None = None,
     observed_on: date | None = None,
 ) -> None:
@@ -273,7 +273,7 @@ def apply_stablecoins(
         return
 
     snapshot.values["stablecoins_total_usd"] = total_usd
-    snapshot.values["stablecoins_asset_count"] = float(asset_count or 0)
+    snapshot.values["stablecoins_peg_count"] = float(peg_count or 0)
 
     prior = week_prior(history) if history and len(history) >= 2 else None
     if prior is None or not prior[1]:

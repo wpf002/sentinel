@@ -155,22 +155,26 @@ def run(
 
     previous_run = store.last_run()
 
-    # Store the aggregate as an observation series so its week-over-week change
-    # uses the same seven-day rule as every FRED series.
-    if stable.ok and persist:
-        store.upsert_observations(
-            STABLECOIN_SERIES, [(today, stable.data["total_usd"])], "defillama"
-        )
+    # The aggregate is stored as an observation series so its week-over-week
+    # change uses the same seven-day rule as every FRED series. The source
+    # returns its full daily history, so each run refreshes the whole series
+    # rather than appending one point.
+    fetched_history = list(stable.data.get("history") or []) if stable.ok else []
+    if fetched_history and persist:
+        store.upsert_observations(STABLECOIN_SERIES, fetched_history, "defillama")
     history = store.series_history(STABLECOIN_SERIES)
-    if stable.ok and not persist:
+    if fetched_history and not persist:
         history = _merge_fetched(
-            {STABLECOIN_SERIES: history}, {STABLECOIN_SERIES: [(today, stable.data["total_usd"])]}
+            {STABLECOIN_SERIES: history}, {STABLECOIN_SERIES: fetched_history}
         )[STABLECOIN_SERIES]
+
     if stable.ok:
+        observed_on = stable.data.get("observed_on") or today
         apply_stablecoins(
-            snapshot, stable.data["total_usd"], stable.data["asset_count"], history,
-            observed_on=today,
+            snapshot, stable.data["total_usd"], stable.data["peg_count"], history,
+            observed_on=observed_on,
         )
+        snapshot.dates["stablecoins_date"] = observed_on.isoformat()
     else:
         carried = history[-1][1] if history else None
         apply_stablecoins(

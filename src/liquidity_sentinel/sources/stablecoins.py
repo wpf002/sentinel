@@ -3,77 +3,103 @@
 This is the one source that has never failed, so it carries the weekly signal on
 its own when FRED is degraded.
 
-The payload nests circulating supply under ``peggedAssets[].circulating`` as a
-dict keyed by peg type (``peggedUSD``, ``peggedEUR``, ...). The original parser
-walked a fixed key list and silently produced ``None`` when the shape shifted,
-which is what ``stablecoins_note.json`` in the export recorded. This version
-walks the nested structure explicitly and reports how many assets it summed so a
-schema change shows up as a count drop rather than as silence.
+It reads ``/stablecoincharts/all``, which returns the full daily history of
+aggregate supply, rather than ``/stablecoins``, which returns only a current
+per-asset snapshot. Two reasons:
+
+*History.* With a snapshot endpoint, the only stablecoin history the tracker had
+was one point per run. A 44-day gap between runs produced a "week-over-week"
+figure measured over 44 days. The chart endpoint carries 3,244 daily points back
+to 2017-11-29, so the seven-day comparison is always a real seven days.
+
+*One series.* The two endpoints do not agree: on 2026-10-14 the chart endpoint
+reported $307.80B against the snapshot's $308.67B, a 0.28% difference in
+aggregation. Backfilling from one and comparing against the other would inject a
+phantom $0.87B move at the join. Reading both the current value and the history
+from the same endpoint removes the seam.
+
+The totals are summed across every peg currency (``peggedUSD``, ``peggedEUR``,
+``peggedJPY``, ...), matching what the previous per-asset sum did.
 """
 
 from __future__ import annotations
 
 import json
 import math
+from datetime import UTC, date, datetime
 
 from ..config import Config
 from ..http import FetchError, fetch
 from .base import SourceResult
 
-CIRCULATING_KEYS = ("circulating", "mcap", "marketCap", "market_cap")
-PEG_VALUE_KEYS = ("peggedUSD", "peggedVAR", "peggedEUR", "usd", "value")
+SERIES = "STABLECOINS_TOTAL"
+TOTAL_KEYS = ("totalCirculatingUSD", "totalCirculating")
 
 
-def _as_usd(node: object) -> float | None:
-    """Coerce a DefiLlama circulating/mcap node into a USD float."""
-    if isinstance(node, (int, float)) and math.isfinite(float(node)):
-        return float(node)
-    if isinstance(node, dict):
-        for key in PEG_VALUE_KEYS:
-            value = node.get(key)
-            if isinstance(value, (int, float)) and math.isfinite(float(value)):
-                return float(value)
-        # Unknown peg key: fall back to the single numeric member if unambiguous.
-        numeric = [float(v) for v in node.values() if isinstance(v, (int, float))]
-        if len(numeric) == 1 and math.isfinite(numeric[0]):
-            return numeric[0]
-    return None
-
-
-def parse_payload(payload: object) -> tuple[float | None, int, list[str]]:
-    """Return ``(total_usd, asset_count, notes)``."""
-    notes: list[str] = []
-    assets = payload.get("peggedAssets") if isinstance(payload, dict) else None
-    if not isinstance(assets, list):
-        keys = sorted(payload.keys())[:10] if isinstance(payload, dict) else []
-        notes.append(f"peggedAssets missing; top-level keys: {keys}")
-        return None, 0, notes
-
+def _sum_pegs(node: object) -> float | None:
+    """Sum every numeric peg value in a ``totalCirculatingUSD`` node."""
+    if isinstance(node, (int, float)):
+        value = float(node)
+        return value if math.isfinite(value) else None
+    if not isinstance(node, dict):
+        return None
     total = 0.0
-    counted = 0
-    skipped: list[str] = []
-    for asset in assets:
-        if not isinstance(asset, dict):
+    found = False
+    for value in node.values():
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            total += float(value)
+            found = True
+    return total if found else None
+
+
+def _point_date(raw: object) -> date | None:
+    """Chart points carry a Unix timestamp, usually as a string."""
+    try:
+        return datetime.fromtimestamp(int(raw), UTC).date()
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def parse_history(payload: object) -> tuple[list[tuple[date, float]], int, list[str]]:
+    """Return ``(points, peg_count, notes)`` from a ``/stablecoincharts`` payload.
+
+    ``peg_count`` is the number of peg currencies in the newest point. It is the
+    schema canary: a sudden drop means the upstream shape changed, which is the
+    failure ``stablecoins_note.json`` recorded against the old parser.
+    """
+    notes: list[str] = []
+    if not isinstance(payload, list):
+        kind = type(payload).__name__
+        keys = sorted(payload.keys())[:10] if isinstance(payload, dict) else []
+        notes.append(f"expected a list of chart points, got {kind}; keys: {keys}")
+        return [], 0, notes
+
+    points: dict[date, float] = {}
+    skipped = 0
+    peg_count = 0
+    for item in payload:
+        if not isinstance(item, dict):
+            skipped += 1
             continue
-        value = None
-        for key in CIRCULATING_KEYS:
-            value = _as_usd(asset.get(key))
-            if value is not None:
-                break
-        if value is None:
-            skipped.append(str(asset.get("symbol") or asset.get("name") or "?"))
+        observed = _point_date(item.get("date"))
+        node = next((item[k] for k in TOTAL_KEYS if k in item), None)
+        total = _sum_pegs(node)
+        if observed is None or total is None:
+            skipped += 1
             continue
-        total += value
-        counted += 1
+        points[observed] = total
+        if isinstance(node, dict):
+            peg_count = len(node)
 
     if skipped:
-        notes.append(f"{len(skipped)} asset(s) without a readable supply: {skipped[:5]}")
-    if not counted:
-        return None, 0, notes
-    return total, counted, notes
+        notes.append(f"{skipped} unreadable chart point(s) skipped")
+    if not points:
+        notes.append("no usable chart points found")
+    return sorted(points.items()), peg_count, notes
 
 
 def fetch_stablecoins(cfg: Config, *, fetcher=fetch) -> SourceResult:
+    """Fetch aggregate supply plus its full daily history in one request."""
     result = SourceResult(name="stablecoins")
     try:
         response = fetcher(cfg.stablecoins.url, cfg.http)
@@ -90,12 +116,18 @@ def fetch_stablecoins(cfg: Config, *, fetcher=fetch) -> SourceResult:
         result.errors["parse"] = f"invalid JSON: {exc}"
         return result
 
-    total, count, notes = parse_payload(payload)
+    points, peg_count, notes = parse_history(payload)
     result.notes.extend(notes)
-    if total is None:
+    if not points:
         result.errors["parse"] = "no stablecoin supply values found"
         return result
 
+    latest_date, latest_total = points[-1]
     result.ok = True
-    result.data = {"total_usd": total, "asset_count": count}
+    result.data = {
+        "total_usd": latest_total,
+        "peg_count": peg_count,
+        "observed_on": latest_date,
+        "history": points,
+    }
     return result

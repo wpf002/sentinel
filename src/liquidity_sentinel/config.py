@@ -48,7 +48,7 @@ class FredConfig:
 
 @dataclass(frozen=True)
 class StablecoinConfig:
-    url: str = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
+    url: str = "https://stablecoins.llama.fi/stablecoincharts/all"
     stale_after_days: int = 10
 
 

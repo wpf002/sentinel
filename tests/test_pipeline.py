@@ -18,6 +18,11 @@ NOW = datetime(2026, 8, 31, 12, 0, tzinfo=UTC)
 TODAY = date(2026, 8, 31)
 
 
+def chart_points(fixtures) -> int:
+    """How many daily points the stablecoin fixture carries."""
+    return len(json.loads((fixtures / "stablecoin_chart.json").read_text()))
+
+
 def series_csv(series: str, points: list[tuple[str, float]]) -> str:
     rows = "\n".join(f"{d},{v}" for d, v in points)
     return f"observation_date,{series}\n{rows}\n"
@@ -41,7 +46,7 @@ def local_cfg(cfg):
 
 
 def test_full_run_records_every_series(local_cfg, store, fixtures):
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     ecb = (fixtures / "ecb_year_include.html").read_text()
     fetcher = RecordedFetcher({**full_fred_routes(), "llama.fi": stable, "/2026/": ecb})
 
@@ -50,15 +55,17 @@ def test_full_run_records_every_series(local_cfg, store, fixtures):
     assert result.ran
     assert result.payload["source_status"]["fred"] == f"{len(ALL_SERIES)}/{len(ALL_SERIES)} series"
     assert len(result.snapshot.fresh_series) == len(ALL_SERIES)
-    # 15 FRED series x 2 observations, plus the stablecoin aggregate.
-    assert store.observation_count() == len(ALL_SERIES) * 2 + 1
-    assert store.series_history("STABLECOINS_TOTAL"), "aggregate stored as a series"
+    # 15 FRED series x 2 observations, plus the stablecoin aggregate's full
+    # daily history -- the source returns all of it, not just today's point.
+    expected = len(ALL_SERIES) * 2 + chart_points(fixtures)
+    assert store.observation_count() == expected
+    assert len(store.series_history("STABLECOINS_TOTAL")) == chart_points(fixtures)
 
 
 def test_zip_response_no_longer_reads_as_unavailable(local_cfg, store, fixtures):
     """The exact regression: HTTP 200 + ZIP body used to mean 'FRED down'."""
     archive = (fixtures / "fred_multiseries.zip").read_bytes()
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
 
     class ZipFetcher:
         def __call__(self, url, http_cfg, **kwargs):
@@ -78,7 +85,7 @@ def test_zip_response_no_longer_reads_as_unavailable(local_cfg, store, fixtures)
 def test_one_dead_series_does_not_freeze_the_run(local_cfg, store, fixtures):
     """The blast-radius fix, end to end."""
     routes = full_fred_routes()
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
 
     class PartialFetcher:
         def __call__(self, url, http_cfg, **kwargs):
@@ -102,7 +109,7 @@ def test_one_dead_series_does_not_freeze_the_run(local_cfg, store, fixtures):
 
 
 def test_total_fred_outage_still_produces_a_stablecoin_run(local_cfg, store, fixtures):
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
 
     class FredDown:
         def __call__(self, url, http_cfg, **kwargs):
@@ -119,12 +126,12 @@ def test_total_fred_outage_still_produces_a_stablecoin_run(local_cfg, store, fix
 
 def test_cached_series_survive_a_failed_fetch(local_cfg, store, fixtures):
     """Week two: FRED is down, but the mirror still answers."""
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     healthy = RecordedFetcher(
         {**full_fred_routes(), "llama.fi": stable}, default=FetchError("u", 1, "HTTP 404")
     )
     run(local_cfg, store=store, force=True, fetcher=healthy, today=TODAY, now=NOW)
-    assert store.observation_count() == len(ALL_SERIES) * 2 + 1
+    assert store.observation_count() == len(ALL_SERIES) * 2 + chart_points(fixtures)
 
     class AllDown:
         def __call__(self, url, http_cfg, **kwargs):
@@ -142,7 +149,7 @@ def test_cached_series_survive_a_failed_fetch(local_cfg, store, fixtures):
 
 
 def test_stale_cache_is_flagged_not_silently_reused(local_cfg, store, fixtures):
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     healthy = RecordedFetcher(
         {**full_fred_routes(), "llama.fi": stable}, default=FetchError("u", 1, "HTTP 404")
     )
@@ -165,7 +172,7 @@ def test_stale_cache_is_flagged_not_silently_reused(local_cfg, store, fixtures):
 
 
 def test_dry_run_writes_nothing(local_cfg, store, fixtures):
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     fetcher = RecordedFetcher(
         {**full_fred_routes(), "llama.fi": stable}, default=FetchError("u", 1, "x")
     )
@@ -192,7 +199,7 @@ def test_in_window_matches_the_configured_slot(cfg):
 
 
 def test_run_payload_is_json_serialisable(local_cfg, store, fixtures):
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     fetcher = RecordedFetcher(
         {**full_fred_routes(), "llama.fi": stable}, default=FetchError("u", 1, "x")
     )
@@ -209,7 +216,7 @@ def test_migrate_parses_the_exported_wide_history():
 
 def test_dry_run_writes_nothing_at_all(local_cfg, store, fixtures):
     """--dry-run must not touch observations, source health or the run log."""
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     ecb = (fixtures / "ecb_year_include.html").read_text()
     fetcher = RecordedFetcher({**full_fred_routes(), "llama.fi": stable, "/2026/": ecb})
 
@@ -225,7 +232,7 @@ def test_dry_run_writes_nothing_at_all(local_cfg, store, fixtures):
 
 def test_dry_run_still_evaluates_fetched_data(local_cfg, store, fixtures):
     """Reading nothing from disk must not mean reporting nothing."""
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     ecb = (fixtures / "ecb_year_include.html").read_text()
     fetcher = RecordedFetcher({**full_fred_routes(), "llama.fi": stable, "/2026/": ecb})
 
@@ -241,7 +248,7 @@ def test_dry_run_still_evaluates_fetched_data(local_cfg, store, fixtures):
 
 def test_dry_run_merges_over_cached_history(local_cfg, store, fixtures):
     """A dry run after a real run sees both the mirror and the new fetch."""
-    stable = (fixtures / "stablecoins.json").read_text()
+    stable = (fixtures / "stablecoin_chart.json").read_text()
     healthy = RecordedFetcher(
         {**full_fred_routes(), "llama.fi": stable}, default=FetchError("u", 1, "HTTP 404")
     )

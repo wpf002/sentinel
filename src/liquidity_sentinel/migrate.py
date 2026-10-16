@@ -19,7 +19,6 @@ from .store import Store
 
 SEED_CSV = Path("data/seed/fred_history.csv")
 LEGACY_STATE = Path("legacy/tracker_files/global_liquidity_tracker_state.json")
-LEGACY_FINDINGS = Path("legacy/tracker_files")
 
 
 def load_wide_csv(text: str) -> dict[str, list[tuple[date, float]]]:
@@ -87,42 +86,21 @@ def import_legacy_state(store: Store, path: Path = LEGACY_STATE) -> dict | None:
     return latest
 
 
-def import_stablecoin_history(store: Store, directory: Path = LEGACY_FINDINGS) -> int:
-    """Seed the stablecoin series from the export's per-run findings files.
-
-    Each ``findings_YYYY-MM-DD.json`` records that run's aggregate, so the first
-    local run has a genuine week-prior comparison instead of none.
-    """
-    if not directory.exists():
-        return 0
-    points: list[tuple[date, float]] = []
-    for path in sorted(directory.glob("findings_*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        total = payload.get("stablecoins_total_usd")
-        raw_run = payload.get("run_utc") or ""
-        if not isinstance(total, (int, float)) or not raw_run:
-            continue
-        try:
-            observed = date.fromisoformat(raw_run[:10])
-        except ValueError:
-            continue
-        points.append((observed, float(total)))
-    if not points:
-        return 0
-    return store.upsert_observations("STABLECOINS_TOTAL", sorted(points), "seed_export")
-
-
 def migrate(store: Store) -> dict:
+    """Import the exported FRED history and the last Perplexity-era snapshot.
+
+    Stablecoin history is deliberately not seeded from the export. The findings
+    files record totals from DefiLlama's ``/stablecoins`` snapshot endpoint,
+    which aggregates differently from the ``/stablecoincharts`` series the
+    tracker now reads (0.28% apart on 2026-10-14). Mixing the two in one series
+    would produce phantom week-over-week moves. The chart endpoint supplies the
+    full daily history on the first run anyway.
+    """
     seeded = import_seed(store)
     legacy = import_legacy_state(store)
-    stablecoin_rows = import_stablecoin_history(store)
     return {
         "series_seeded": len(seeded),
         "rows_seeded": sum(seeded.values()),
-        "stablecoin_rows_seeded": stablecoin_rows,
         "legacy_asof": (legacy or {}).get("asof_date"),
         "total_observations": store.observation_count(),
     }
